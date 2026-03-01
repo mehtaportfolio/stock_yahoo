@@ -1,18 +1,18 @@
-require("dotenv").config();
-const express = require("express");
-const YahooFinance = require("yahoo-finance2").default;
-const { createClient } = require("@supabase/supabase-js");
+// index.js
+import express from "express";
+import YahooFinance from "yahoo-finance2";
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Yahoo Finance client
-const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
-
-// Supabase client
+// ---------------- Supabase ----------------
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // ---------------- Symbol Conversion ----------------
@@ -34,8 +34,6 @@ function convertToDB(yahooSymbol) {
   return yahooSymbol;
 }
 
-// ---------------- Yahoo Symbol Variants ----------------
-
 // Generate possible Yahoo symbol variants for a stock
 function generateYahooVariants(dbSymbol) {
   const variants = [];
@@ -56,7 +54,6 @@ function generateYahooVariants(dbSymbol) {
 }
 
 // ---------------- Main Route ----------------
-
 app.get("/fill-missing-cmp", async (req, res) => {
   try {
     console.log("🔍 Checking missing CMP/LCP...");
@@ -69,7 +66,7 @@ app.get("/fill-missing-cmp", async (req, res) => {
       .limit(1000);
 
     if (error) throw error;
-    if (!stocks.length) return res.json({ message: "No missing stocks found." });
+    if (!stocks || stocks.length === 0) return res.json({ message: "No missing stocks found." });
 
     console.log(`📊 Found ${stocks.length} stocks missing CMP/LCP`);
 
@@ -87,22 +84,17 @@ app.get("/fill-missing-cmp", async (req, res) => {
         const dbSymbol = stock.symbol;
         const stockName = stock.stock_name || null;
         let yfData = null;
-        let yahooSymbolUsed = null;
 
         const variants = generateYahooVariants(dbSymbol);
 
-        // Try each variant until we get valid CMP
+        // Try each variant until valid CMP is found
         for (const sym of variants) {
           try {
-            yfData = await yahooFinance.quote(sym);
-            if (yfData && yfData.regularMarketPrice != null) {
-              yahooSymbolUsed = sym;
-              break;
-            }
+            yfData = await YahooFinance.default(sym);
+            if (yfData && yfData.regularMarketPrice != null) break;
           } catch {}
         }
 
-        // If still failed
         if (!yfData || yfData.regularMarketPrice == null) {
           failedSymbols.push({ symbol: dbSymbol, name: stockName });
           return;
@@ -113,7 +105,6 @@ app.get("/fill-missing-cmp", async (req, res) => {
 
         if (cmpVal === 0 || lcpVal === 0) zeroValues++;
 
-        // Update Supabase
         await supabase
           .from("stock_master")
           .update({ cmp: cmpVal, lcp: lcpVal })
@@ -145,7 +136,6 @@ app.get("/fill-missing-cmp", async (req, res) => {
 });
 
 // ---------------- Start Server ----------------
-
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: stock-cmp-updater
+    env: node
+    branch: main
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: SUPABASE_URL
+        fromSecret: SUPABASE_URL
+      - key: SUPABASE_KEY
+        fromSecret: SUPABASE_KEY
+      - key: PORT
+        value: 10000
